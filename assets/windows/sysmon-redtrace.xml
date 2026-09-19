@@ -1,0 +1,45 @@
+<Sysmon schemaversion="4.82">
+  <!-- Lightweight workstation baseline. Validate against the selected Sysmon binary before install. -->
+  <HashAlgorithms>SHA256,IMPHASH</HashAlgorithms>
+  <CheckRevocation>true</CheckRevocation>
+  <DnsLookup>false</DnsLookup>
+  <EventFiltering>
+    <!-- Empty exclude means that no ProcessCreate events are excluded. -->
+    <ProcessCreate onmatch="exclude" />
+
+    <!-- Network telemetry is limited to common administrative/script hosts. -->
+    <NetworkConnect onmatch="include">
+      <Image condition="end with">\powershell.exe</Image>
+      <Image condition="end with">\pwsh.exe</Image>
+      <Image condition="end with">\cmd.exe</Image>
+      <Image condition="end with">\wscript.exe</Image>
+      <Image condition="end with">\cscript.exe</Image>
+      <Image condition="end with">\rundll32.exe</Image>
+      <Image condition="end with">\mshta.exe</Image>
+    </NetworkConnect>
+
+    <!-- Module loads are noisy; only selected scripting surfaces are included. -->
+    <ImageLoad onmatch="include">
+      <ImageLoaded condition="end with">\clr.dll</ImageLoaded>
+      <ImageLoaded condition="end with">\jscript.dll</ImageLoaded>
+      <ImageLoaded condition="end with">\vbscript.dll</ImageLoaded>
+    </ImageLoad>
+
+    <FileCreate onmatch="include">
+      <TargetFilename condition="end with">.ps1</TargetFilename>
+      <TargetFilename condition="end with">.vbs</TargetFilename>
+      <TargetFilename condition="end with">.js</TargetFilename>
+      <TargetFilename condition="end with">.hta</TargetFilename>
+    </FileCreate>
+
+    <!-- Registry persistence locations only. -->
+    <RegistryEvent onmatch="include">
+      <TargetObject condition="contains">\CurrentVersion\Run</TargetObject>
+      <TargetObject condition="contains">\CurrentVersion\RunOnce</TargetObject>
+      <TargetObject condition="contains">\Services\</TargetObject>
+    </RegistryEvent>
+
+    <!-- DNS queries provide useful context at moderate volume. -->
+    <DnsQuery onmatch="exclude" />
+  </EventFiltering>
+</Sysmon>
