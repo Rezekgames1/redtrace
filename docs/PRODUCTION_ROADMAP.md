@@ -2,16 +2,21 @@
 
 ## Оценка текущего состояния
 
-RED//TRACE сейчас является вертикальным прототипом локального обозревателя событий:
+Актуальная оценка на 08.10.2026: `docs/PRODUCTION_READINESS.md`. Исполняемый план следующих итераций с зависимостями и критериями готовности: `docs/IMPLEMENTATION_PLAN.md`. Ниже roadmap сохраняет целевые критерии; исторические результаты macOS не заменяют новые Windows/Linux проверки.
+
+RED//TRACE сейчас является закрытой alpha локального обозревателя/лёгкого SIEM с проверенными Windows/Linux сценариями:
 
 - Rust API слушает только `127.0.0.1`;
-- macOS Unified Log читается в режиме read-only;
-- события нормализуются и индексируются в оперативной памяти;
-- работает собственный поисковый DSL;
-- интерфейс позволяет искать события, фильтровать поля и изучать процессный контекст;
-- Windows Audit представлен только как безопасный preview-план.
+- macOS Unified Log и Linux journald читаются потоково в режиме read-only;
+- Windows System/Security/PowerShell/Sysmon читаются через native Event Log subscription/bookmarks; `wevtutil` — явный fallback;
+- активный WAL индексируется в памяти, исторические сегменты ищутся по дисковым postings;
+- подтверждённые пакеты записываются в WAL, атомарно переносятся в неизменяемые сегменты и восстанавливаются после перезапуска;
+- ingestion ограничен bounded-очередью и публикует метрики здоровья;
+- работает собственный DSL с exact/contains/existence и общим contains;
+- GUI поддерживает authenticated live SSE, pause/resume, детали, сохранённые представления и колонки;
+- Windows dev Audit helper имеет allowlist/UAC/snapshots/verify/rollback; production signing gate не закрыт.
 
-Это подтверждает архитектурную идею, но ещё не обеспечивает непрерывный сбор, сохранность данных, детектирование угроз и безопасную поставку. До публичного production-релиза проект следует считать pre-alpha.
+Query executor читает сегментные postings, checkpoints привязаны к durable WAL. Linux продолжает по journald cursor, Windows — по native XML bookmark, macOS — по timestamp. Есть bounded ruleset, alerts, TLS agents и собранные unsigned NSIS/.deb. Подтверждён короткий burst; длинный runner завершился FAIL и не прошёл финальную сверку. Подписанная production-поставка, строгие execution/storage budgets и 24/7 reliability ещё не подтверждены.
 
 ## Целевая production-архитектура
 
@@ -142,6 +147,10 @@ Linux:
 
 Критерий готовности: правила детерминированы, воспроизводимы на fixture-наборе и не могут остановить ingestion.
 
+Текущий статус: реализована первая вертикаль — threshold для отказов входа, блокировка Windows-аккаунта, PowerShell 4104, подозрительные command line и отказ `sudo`; есть suppression, bounded-окна, risk/confidence/MITRE, durable alert log, API и UI с доказательствами. До закрытия блока остаются sequence/absence rules, исторический replay, конфигурируемый безопасный формат пользовательских правил и полный fixture-набор для всех ОС.
+
+Локальный release-gate на macOS: 32 Rust-теста, clippy без предупреждений, UI lint/build/render test, crash/restart 65→65 реальных событий, 500 поисковых запросов с concurrency 20 (p95 около 11 мс, RSS ядра около 12 МБ). Эти цифры не заменяют 24/72-часовой soak и нативную проверку Windows/Linux.
+
 ## P1 — обязательные блоки до публичной beta
 
 ### 7. Безопасность локального приложения
@@ -266,13 +275,15 @@ Production-релиз запрещён, пока не выполнены все 
 
 ## Приоритет ближайшей реализации
 
-Следующий кодовый этап должен включать только фундамент ingestion/storage:
+Offsets, native Windows subscriptions/bookmarks, journald cursors, cursor pagination, первые детекты/alerts, TLS agents и desktop уже реализованы. Их нельзя считать незавершёнными только из-за старых формулировок roadmap.
 
-1. `Collector` trait с потоковой выдачей событий и checkpoint.
-2. Bounded ingestion queue с метриками backpressure/drop.
-3. WAL v1 с checksum и recovery-тестами.
-4. Стабильный event UID и versioned normalized schema.
-5. Инкрементальное добавление в индекс без полной замены.
-6. Реальный status API: lag, queue depth, last event, dropped, WAL size.
+Ближайшие итерации:
 
-Детекты, новые экраны и установщики следует строить после появления гарантированно надёжного потока и хранения: иначе они будут опираться на данные, которые могут исчезать или дублироваться.
+1. Query parser/executor budgets, cancellation/concurrency; bounded Linux follow и ingest metadata/quotas.
+2. Retention age/hard cap и deterministic storage failure tests.
+3. Первый реальный remote endpoint по сети существующим агентом.
+4. Service/daemon lifecycle collector/agent; durable disk spool и continuous agent delivery вместо default poll 5s.
+5. GUI onboarding/host health и lifecycle токенов/CA/сертификатов.
+6. Production helper trust/signing, минимальная distro matrix и upgrade/recovery gates.
+
+Полный порядок, small-commit breakdown и acceptance: `docs/IMPLEMENTATION_PLAN.md`. Короткая диагностика прежнего long-run failure сопровождает этапы; новые длительные тесты запускаются только после нового указания владельца.

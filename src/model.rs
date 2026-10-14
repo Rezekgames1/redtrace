@@ -36,14 +36,41 @@ impl Event {
         }
     }
 
+    pub fn remote(
+        agent_id: &str,
+        timestamp: String,
+        source: String,
+        level: String,
+        message: String,
+        fields: BTreeMap<String, String>,
+    ) -> Self {
+        let scoped_source = format!("agent:{agent_id}:{source}");
+        let uid = stable_uid(&timestamp, &scoped_source, &message);
+        Self {
+            id: 0,
+            uid,
+            schema_version: 1,
+            timestamp,
+            source,
+            level,
+            message,
+            fields,
+        }
+    }
+
     pub fn field(&self, name: &str) -> Option<&str> {
         match name {
+            "uid" | "event.uid" => Some(&self.uid),
             "@timestamp" | "timestamp" => Some(&self.timestamp),
             "source" | "log.source" => Some(&self.source),
             "level" | "event.level" => Some(&self.level),
             "message" | "event.description" => Some(&self.message),
             _ => self.fields.get(name).map(String::as_str),
         }
+    }
+
+    pub fn identify(&mut self, identity: &str) {
+        self.uid = stable_uid(&self.timestamp, &self.source, identity);
     }
 }
 
@@ -73,5 +100,36 @@ mod tests {
         let changed = stable_uid("2026-01-01T00:00:00Z", "macos.sshd", "failed");
         assert_eq!(first, second);
         assert_ne!(first, changed);
+    }
+
+    #[test]
+    fn remote_uid_is_scoped_to_agent() {
+        let fields = BTreeMap::new();
+        let first = Event::remote(
+            "agent-a",
+            "2026-01-01T00:00:00Z".into(),
+            "linux.sshd".into(),
+            "low".into(),
+            "Failed password".into(),
+            fields.clone(),
+        );
+        let second = Event::remote(
+            "agent-b",
+            "2026-01-01T00:00:00Z".into(),
+            "linux.sshd".into(),
+            "low".into(),
+            "Failed password".into(),
+            fields,
+        );
+        let resent = Event::remote(
+            "agent-a",
+            "2026-01-01T00:00:00Z".into(),
+            "linux.sshd".into(),
+            "low".into(),
+            "Failed password".into(),
+            BTreeMap::new(),
+        );
+        assert_ne!(first.uid, second.uid);
+        assert_eq!(first.uid, resent.uid);
     }
 }

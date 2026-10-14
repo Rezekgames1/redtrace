@@ -1,18 +1,58 @@
 [package]
 name = "redtrace"
-version = "0.1.0"
+default-run = "redtrace"
+version = "0.2.0"
 edition = "2024"
+rust-version = "1.89"
 description = "Lightweight local-first security event explorer"
 license = "MIT"
 
 [dependencies]
 axum = { version = "0.8", features = ["json"] }
+axum-server = { version = "0.8", features = ["tls-rustls-no-provider"] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+getrandom = "0.3"
+futures-util = "0.3"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+rcgen = "0.14"
+time = "0.3"
+ring = "0.17"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal", "sync"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal", "sync", "process", "io-util", "time", "fs"] }
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[[bin]]
+name = "redtrace-agent"
+path = "src/bin/agent.rs"
+
+[dev-dependencies]
+rcgen = "0.14"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_NetworkManagement_IpHelper", "Win32_Networking_WinSock", "Win32_Security_Authorization", "Win32_Security_Authentication_Identity", "Win32_Security_WinTrust", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_Registry", "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_System_Pipes", "Win32_System_Services", "Win32_UI_Shell"] }
+
+[[bin]]
+name = "redtrace-audit-helper"
+path = "src/bin/audit-helper.rs"
+
+[[bin]]
+name = "redtrace-service"
+path = "src/bin/redtrace-service.rs"
+
+[[bin]]
+name = "redtrace-service-agent"
+path = "src/bin/service-agent.rs"
+
+[[bin]]
+name = "redtrace-admin"
+path = "src/bin/admin.rs"
 
 [profile.release]
 lto = "thin"

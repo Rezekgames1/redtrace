@@ -1,0 +1,6 @@
+{
+  "build": { "beforeBuildCommand": "" },
+  "app": {
+    "windows": [{ "title": "RED//TRACE — Early Beta 2026-10-13", "width": 1440, "height": 900, "minWidth": 1024, "minHeight": 680, "resizable": true, "fullscreen": false }]
+  }
+}

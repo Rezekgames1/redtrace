@@ -1,0 +1,5 @@
+{
+  "bundle": {
+    "externalBin": ["binaries/redtrace", "binaries/redtrace-agent", "binaries/redtrace-admin", "binaries/redtrace-service", "binaries/redtrace-service-agent", "binaries/redtrace-es-helper"]
+  }
+}

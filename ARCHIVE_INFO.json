@@ -1,0 +1,23 @@
+{
+  "created": "2026-10-13T11:37:14.840596+03:00",
+  "source_revision": "46c30827cbd330baa4e8b20530aba3583931b64c",
+  "snapshot": "Current working tree including uncommitted and new project files",
+  "files": 232,
+  "beta_artifacts": 6,
+  "contents": [
+    "source",
+    "documentation",
+    "tests",
+    "build configuration",
+    "embedded frontend",
+    "beta installers and CLI packages"
+  ],
+  "excluded": [
+    "dependency directories",
+    "build caches",
+    "Python bytecode",
+    "Git metadata",
+    "private environment files",
+    "local event databases and diagnostic logs"
+  ]
+}

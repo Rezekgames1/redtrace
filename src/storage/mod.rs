@@ -1,3 +1,9 @@
+mod checkpoint;
+mod segment_index;
+mod segments;
 mod wal;
 
-pub use wal::{Recovery, Wal};
+pub use checkpoint::{CheckpointStore, SourceCheckpoint};
+pub use segments::{SegmentRecovery, SegmentStore};
+pub use wal::data_directory;
+pub use wal::{QuarantineStats, Recovery, Wal};
