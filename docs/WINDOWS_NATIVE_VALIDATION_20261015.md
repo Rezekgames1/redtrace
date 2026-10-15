@@ -32,6 +32,6 @@ Native probes прочитали реальные каналы: multi-channel st
 
 ## Оставшиеся границы
 
-Новый GUI, установка/удаление NSIS, SCM start/stop/reboot и длительный soak этим этапом не подтверждены. Существующий collector продолжает занимать порт 9710. Политики аудита, Sysmon и ACL рабочих Event Log каналов не менялись.
+Новый GUI проверен отдельным этапом: [25 GUI checks и визуальное ревью](WINDOWS_GUI_VALIDATION_20261015.md). Установка/удаление NSIS, SCM start/stop/reboot и длительный soak не подтверждены. Существующий collector восстановлен после GUI-проверки. Политики аудита, Sysmon и ACL рабочих Event Log каналов не менялись.
 
 Два source-review отчёта OpenCode сохранены в `outputs/windows-validation-20261015/*-review.english.jsonl`. Они отделены от результатов исполнения. В них отмечены вопросы для следующей проверки: права service handle при настройке restart recovery, защита существующего spool при enrollment, восстановление после неполного enrollment, управление повреждённой service installation, ownership scheduled tasks, renewal возле срока CA, хранение скачанных backup, актуальность installer smoke, fairness Windows channels и XML/PID/checkpoint normalization. Эти замечания не считаются закрытыми успешным прогоном существующих тестов и требуют отдельных регрессий и проверки исправлений.

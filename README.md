@@ -208,6 +208,6 @@ Linux core/desktop/agents и результаты проверок: [Linux SIEM]
 
 Текущий release-статус — закрытая alpha / контролируемый пилот. Подтверждённые проверки и незакрытые production gates: [Production readiness](docs/PRODUCTION_READINESS.md).
 
-Для текущих исходников 0.2.0: [настройка collector/агентов, источников, rules, PKI и backup](docs/SETUP_AND_OPERATIONS.md). Реализация и границы проверки: [срез разработки](docs/DEVELOPMENT_20261013.md), [нативная Windows-проверка 15 октября](docs/WINDOWS_NATIVE_VALIDATION_20261015.md). Пакеты `outputs/beta-20261013` сохраняют предыдущий срез, новые функции требуют пересборки.
+Для текущих исходников 0.2.0: [настройка collector/агентов, источников, rules, PKI и backup](docs/SETUP_AND_OPERATIONS.md). Реализация и границы проверки: [срез разработки](docs/DEVELOPMENT_20261013.md), [нативная Windows-проверка 15 октября](docs/WINDOWS_NATIVE_VALIDATION_20261015.md), [25 GUI checks и визуальное ревью](docs/WINDOWS_GUI_VALIDATION_20261015.md). Пакеты `outputs/beta-20261013` сохраняют предыдущий срез, новые функции требуют пересборки.
 
 Исторический план следующих этапов: [План реализации](docs/IMPLEMENTATION_PLAN.md). Публичная поставка и длительные native reliability gates остаются отдельной работой.
