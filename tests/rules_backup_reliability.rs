@@ -281,7 +281,10 @@ fn restore_rebases_owned_paths_and_preserves_rule_filter_strings() {
     let data = f.directory("data");
     let old = data.to_string_lossy().into_owned();
     let mut config = Config::default();
-    config.sources.audit_path = data.join("audit.log").to_string_lossy().into_owned();
+    #[cfg(unix)]
+    {
+        config.sources.audit_path = data.join("audit.log").to_string_lossy().into_owned();
+    }
     config.sources.module_inputs = vec![ModuleInput {
         id: "fixture".into(),
         path: data.join("module.jsonl").to_string_lossy().into_owned(),
@@ -300,10 +303,13 @@ fn restore_rebases_owned_paths_and_preserves_rule_filter_strings() {
         restored.sources.module_inputs[0].query,
         config.sources.module_inputs[0].query
     );
+    #[cfg(unix)]
     assert_eq!(
         PathBuf::from(restored.sources.audit_path),
         target.join("audit.log")
     );
+    #[cfg(windows)]
+    assert_eq!(restored.sources.audit_path, config.sources.audit_path);
     assert_eq!(
         PathBuf::from(&restored.sources.module_inputs[0].path),
         target.join("module.jsonl")

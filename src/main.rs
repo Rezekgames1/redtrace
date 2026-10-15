@@ -602,6 +602,10 @@ async fn run_collector(shutdown: Shutdown) -> io::Result<()> {
             std::process::exit(2);
         }
     };
+    let data_directory = std::path::absolute(redtrace::storage::data_directory())?;
+    if !data_directory.exists() {
+        service::private_directory(&data_directory)?;
+    }
     let wal = match Wal::open_default() {
         Ok(wal) => wal,
         Err(error) => {
@@ -2580,11 +2584,16 @@ mod tests {
     }
 
     fn query_state(limits: ExecutionLimits) -> (AppState, std::path::PathBuf) {
-        let root = std::env::temp_dir().join("opencode").join(format!(
-            "redtrace-api-query-{}-{}",
-            std::process::id(),
-            service::random_secret().unwrap()
-        ));
+        let root = std::env::temp_dir()
+            .canonicalize()
+            .unwrap()
+            .join("opencode")
+            .join(format!(
+                "redtrace-api-query-{}-{}",
+                std::process::id(),
+                service::random_secret().unwrap()
+            ));
+        service::private_directory(&root).unwrap();
         let segments = Arc::new(SegmentStore::open(root.clone()).unwrap());
         let mut events: Vec<_> = (0..4)
             .map(|id| {

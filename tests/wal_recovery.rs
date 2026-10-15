@@ -96,7 +96,11 @@ fn repaired_core_preserves_ack_events_across_rotation_crash_and_replay() {
     let mut random = [0_u8; 32];
     getrandom::fill(&mut random).unwrap();
     let token = redtrace::ingest::hex(&random);
-    let directory = std::env::temp_dir().join(format!("redtrace-wal-process-{}", &token[..16]));
+    let directory = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join(format!("redtrace-wal-process-{}", &token[..16]));
+    redtrace::service::private_directory(&directory).unwrap();
     let first = fixture("valid before interruption");
     let restored = fixture("valid merged after interruption");
     {

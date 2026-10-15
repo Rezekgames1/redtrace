@@ -25,11 +25,11 @@ fn windows_core_and_agent_exchange_real_events_over_tls() {
     let key = dir.join("key.pem");
     std::fs::write(&cert, certificate.cert.pem()).unwrap();
     std::fs::write(&key, certificate.signing_key.serialize_pem()).unwrap();
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let ingest_listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = ingest_listener.local_addr().unwrap().port();
+    let api_listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let api_address = api_listener.local_addr().unwrap();
+    let api_base = format!("http://{api_address}");
     let mut random = [0u8; 32];
     getrandom::fill(&mut random).unwrap();
     let api_token = redtrace::ingest::hex(&random);
@@ -38,15 +38,12 @@ fn windows_core_and_agent_exchange_real_events_over_tls() {
         .timeout(Duration::from_secs(2))
         .build()
         .unwrap();
-    assert!(
-        client
-            .get("http://127.0.0.1:9710/api/health")
-            .send()
-            .is_err(),
-        "core port already occupied"
-    );
+    drop(ingest_listener);
+    drop(api_listener);
     let core = Command::new(env!("CARGO_BIN_EXE_redtrace"))
         .env("REDTRACE_DATA_DIR", dir.join("core"))
+        .env("REDTRACE_API_BIND", api_address.to_string())
+        .env("REDTRACE_COLLECT_LOCAL", "0")
         .env("REDTRACE_LOOKBACK", "24h")
         .env("REDTRACE_API_TOKEN", &api_token)
         .env("REDTRACE_INGEST_BIND", format!("127.0.0.1:{port}"))
@@ -60,7 +57,7 @@ fn windows_core_and_agent_exchange_real_events_over_tls() {
     let mut ready = false;
     for _ in 0..100 {
         if let Ok(response) = client
-            .get("http://127.0.0.1:9710/api/health")
+            .get(format!("{api_base}/api/health"))
             .header("x-redtrace-token", &api_token)
             .send()
             && response.status().is_success()
@@ -72,7 +69,7 @@ fn windows_core_and_agent_exchange_real_events_over_tls() {
     }
     assert!(ready, "core startup timed out");
     let registered = client
-        .post("http://127.0.0.1:9710/api/agents")
+        .post(format!("{api_base}/api/agents"))
         .header("x-redtrace-token", &api_token)
         .header("content-type", "application/json")
         .body("{\"name\":\"windows-tls-process\"}")
@@ -106,9 +103,7 @@ fn windows_core_and_agent_exchange_real_events_over_tls() {
     let mut received = false;
     for _ in 0..120 {
         let response = client
-            .get(format!(
-                "http://127.0.0.1:9710/api/search?q=agent.id:{id}&limit=1"
-            ))
+            .get(format!("{api_base}/api/search?q=agent.id:{id}&limit=1"))
             .header("x-redtrace-token", &api_token)
             .send()
             .unwrap()

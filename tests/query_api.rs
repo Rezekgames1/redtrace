@@ -26,18 +26,17 @@ fn api_enforces_parser_budgets_and_keeps_valid_queries_working() {
         .timeout(Duration::from_secs(5))
         .build()
         .unwrap();
-    assert!(
-        std::net::TcpListener::bind("127.0.0.1:9710").is_ok(),
-        "core port already occupied"
-    );
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
     let mut random = [0u8; 32];
     getrandom::fill(&mut random).unwrap();
     let token = redtrace::ingest::hex(&random);
-    let directory = std::env::temp_dir().join(format!(
+    let directory = std::env::temp_dir().canonicalize().unwrap().join(format!(
         "redtrace-query-api-{}-{}",
         std::process::id(),
         &token[..16]
     ));
+    redtrace::service::private_directory(&directory).unwrap();
     let fixture = Event::normalized(
         1,
         chrono::Utc::now().to_rfc3339(),
@@ -50,8 +49,11 @@ fn api_enforces_parser_budgets_and_keeps_valid_queries_working() {
         .unwrap()
         .append(std::slice::from_ref(&fixture))
         .unwrap();
+    drop(listener);
     let child = Command::new(env!("CARGO_BIN_EXE_redtrace"))
         .env("REDTRACE_DATA_DIR", &directory)
+        .env("REDTRACE_API_BIND", address.to_string())
+        .env("REDTRACE_COLLECT_LOCAL", "0")
         .env("REDTRACE_API_TOKEN", &token)
         .env("REDTRACE_QUERY_MAX_BYTES", "1024")
         .env("REDTRACE_QUERY_MAX_TOKENS", "128")
@@ -63,7 +65,7 @@ fn api_enforces_parser_budgets_and_keeps_valid_queries_working() {
         .spawn()
         .unwrap();
     let mut core = Core { child, directory };
-    let base = "http://127.0.0.1:9710/api";
+    let base = format!("http://{address}/api");
     let expected_limits = serde_json::json!({
         "max_bytes": 1024, "max_tokens": 128, "max_depth": 8, "max_nodes": 32,
     });
@@ -169,8 +171,10 @@ fn api_enforces_parser_budgets_and_keeps_valid_queries_working() {
         }
     }
     drop(core);
-    let invalid_directory =
-        std::env::temp_dir().join(format!("redtrace-invalid-query-{}", &token[..16]));
+    let invalid_directory = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join(format!("redtrace-invalid-query-{}", &token[..16]));
     let output = Command::new(env!("CARGO_BIN_EXE_redtrace"))
         .env("REDTRACE_QUERY_MAX_DEPTH", "100000")
         .env("REDTRACE_DATA_DIR", &invalid_directory)
