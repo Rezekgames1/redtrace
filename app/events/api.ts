@@ -18,8 +18,8 @@ async function apiFetch(path: string, init: RequestInit = {}): Promise<Response>
   const token = await localSessionToken();
   const headers = new Headers(init.headers);
   if (token) headers.set("x-redtrace-token", token);
-  let response = await fetch(`${API_ROOT}${path}`, { ...init, headers });
-  if (response.status === 401 && typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) { tokenPromise = null; headers.set("x-redtrace-token", await localSessionToken()); response = await fetch(`${API_ROOT}${path}`, { ...init, headers }); }
+  let response = await fetch(`${API_ROOT}${path}`, { ...init, headers, cache: "no-store" });
+  if (response.status === 401 && typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) { tokenPromise = null; headers.set("x-redtrace-token", await localSessionToken()); response = await fetch(`${API_ROOT}${path}`, { ...init, headers, cache: "no-store" }); }
   return response;
 }
 

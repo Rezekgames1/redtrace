@@ -151,7 +151,7 @@ export default function Home() {
     };
     requestSyncRef.current = schedule;
     const synchronize = async () => {
-      if (!active || document.hidden) return;
+      if (!active || (document.hidden && Date.now() - lastHealth < 15000)) return;
       if (busy || manualBusyRef.current) { again = true; return; }
       busy = true;
       again = false;
