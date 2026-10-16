@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{self, File, OpenOptions},
-    io::{self, Read, Write},
+    io::{self, BufWriter, Read, Write},
     path::{Path, PathBuf},
 };
 
@@ -620,17 +620,18 @@ fn tokenize(value: &str) -> BTreeSet<String> {
 
 fn write_json_atomic<T: Serialize>(path: &Path, value: &T) -> io::Result<()> {
     let temp = temporary_path(path)?;
-    let mut file = private_file(&temp)?;
+    let mut file = BufWriter::with_capacity(64 * 1024, private_file(&temp)?);
     serde_json::to_writer(&mut file, value).map_err(io::Error::other)?;
     file.write_all(b"\n")?;
     file.flush()?;
-    file.sync_all()?;
+    file.get_ref().sync_all()?;
+    drop(file);
     fs::rename(temp, path)
 }
 
 fn write_offsets_atomic(path: &Path, events: &[Event]) -> io::Result<()> {
     let temp = temporary_path(path)?;
-    let mut file = private_file(&temp)?;
+    let mut file = BufWriter::with_capacity(64 * 1024, private_file(&temp)?);
     file.write_all(OFFSETS_MAGIC)?;
     file.write_all(&(events.len() as u32).to_le_bytes())?;
     let mut offset = 0_u64;
@@ -640,7 +641,8 @@ fn write_offsets_atomic(path: &Path, events: &[Event]) -> io::Result<()> {
         offset = offset.saturating_add(bytes.len() as u64 + 1);
     }
     file.flush()?;
-    file.sync_all()?;
+    file.get_ref().sync_all()?;
+    drop(file);
     fs::rename(temp, path)
 }
 
@@ -664,7 +666,7 @@ where
         .map(|posting| posting.into_iter().collect())
         .collect();
     let temp = temporary_path(path)?;
-    let mut file = private_file(&temp)?;
+    let mut file = BufWriter::with_capacity(64 * 1024, private_file(&temp)?);
     file.write_all(POSTINGS_MAGIC)?;
     file.write_all(&(field_postings.len() as u32).to_le_bytes())?;
     file.write_all(&(term_postings.len() as u32).to_le_bytes())?;
@@ -682,7 +684,8 @@ where
         }
     }
     file.flush()?;
-    file.sync_all()?;
+    file.get_ref().sync_all()?;
+    drop(file);
     fs::rename(temp, path)
 }
 

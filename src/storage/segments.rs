@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashSet},
     fs::{self, File, OpenOptions},
-    io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write},
+    io::{self, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::{Instant, SystemTime, UNIX_EPOCH},
@@ -576,7 +576,7 @@ impl SegmentStore {
         let filename = format!("{stem}.jsonl");
         let final_path = transaction.directory.join(&filename);
         let temp_path = transaction.directory.join(format!(".{filename}.tmp"));
-        let mut file = private_file(&temp_path)?;
+        let mut file = BufWriter::with_capacity(64 * 1024, private_file(&temp_path)?);
         for event in events {
             serde_json::to_writer(&mut file, event).map_err(io::Error::other)?;
             file.write_all(b"\n")?;
@@ -584,7 +584,7 @@ impl SegmentStore {
         }
         file.flush()?;
         self.fail_at("segment_sync")?;
-        file.sync_all()?;
+        file.get_ref().sync_all()?;
         drop(file);
         fs::rename(&temp_path, &final_path)?;
         self.fail_at("index_write")?;
@@ -1336,6 +1336,32 @@ mod tests {
         let recovery = store.recover().unwrap();
         assert_eq!(recovery.events.len(), 2);
         assert_eq!(recovery.corrupted_segments, 0);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn buffered_segments_preserve_large_records_and_index_offsets() {
+        let root = directory("buffered-large-records");
+        let store = SegmentStore::open(root.clone()).unwrap();
+        let mut first = event(1, &"large first record ".repeat(6000));
+        first
+            .fields
+            .insert("payload".into(), "é\\\"\n".repeat(20000));
+        let second = event(2, "short middle record");
+        let third = event(
+            3,
+            &format!("{} final-marker", "длинная запись ".repeat(6000)),
+        );
+        let expected = vec![first, second, third];
+        store.commit(&expected).unwrap();
+        let recovery = store.recover().unwrap();
+        assert_eq!(recovery.corrupted_segments, 0);
+        assert_eq!(recovery.corrupted_indexes, 0);
+        assert_eq!(recovery.events, expected);
+        let query = crate::query::parse("message~final-marker").unwrap();
+        let found = store.search(&query, 10).unwrap();
+        assert_eq!(found.total, 1);
+        assert_eq!(found.events, vec![expected[2].clone()]);
         let _ = fs::remove_dir_all(root);
     }
 
