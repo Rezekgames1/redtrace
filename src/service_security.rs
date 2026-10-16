@@ -5,6 +5,13 @@ use std::{
     path::Path,
 };
 
+#[cfg(any(windows, test))]
+fn windows_writable_access(mask: u32) -> bool {
+    // Data/metadata writes, delete, DACL/owner changes and generic write/all.
+    // READ_CONTROL, SYNCHRONIZE and GENERIC_READ are normal read/execute grants.
+    mask & 0x500d0156 != 0
+}
+
 pub(super) fn no_redirects(path: &Path) -> io::Result<()> {
     for ancestor in path.ancestors() {
         match fs::symlink_metadata(ancestor) {
@@ -385,7 +392,7 @@ mod windows {
             let allowed = unsafe { &*ace.cast::<ACCESS_ALLOWED_ACE>() };
             let sid = (&allowed.SidStart as *const u32).cast_mut().cast();
             let name = sid_text(sid)?;
-            if (private || allowed.Mask & 0xd01f0156 != 0) && !trusted(&name) {
+            if (private || windows_writable_access(allowed.Mask)) && !trusted(&name) {
                 return Err(invalid("service path grants untrusted access"));
             }
             if name == current {
@@ -576,5 +583,67 @@ mod windows {
             ));
         }
         Ok(())
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn installed_binary_allows_users_read_execute_but_rejects_write() {
+        struct Directory(std::path::PathBuf);
+        impl Drop for Directory {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+        let root = Directory(
+            fs::canonicalize(std::env::temp_dir())
+                .unwrap()
+                .join(format!(
+                    "redtrace-installed-acl-{}",
+                    crate::service::random_secret().unwrap()
+                )),
+        );
+        crate::service::private_directory(&root.0).unwrap();
+        let binary = root.0.join("binary.exe");
+        crate::service::write_private(&binary, b"ACL validation fixture").unwrap();
+        let grant = |path: &Path, permissions: &str| {
+            let result = std::process::Command::new("icacls.exe")
+                .arg(path)
+                .args(["/grant", permissions])
+                .output()
+                .unwrap();
+            assert!(
+                result.status.success(),
+                "{}",
+                String::from_utf8_lossy(&result.stderr)
+            );
+        };
+        grant(&root.0, "*S-1-5-32-545:(OI)(CI)(RX)");
+        grant(&binary, "*S-1-5-32-545:(RX)");
+        crate::service::protected_binary(&binary).unwrap();
+        assert!(crate::service::protected_file(&binary).is_err());
+        grant(&binary, "*S-1-5-32-545:(W)");
+        assert!(crate::service::protected_binary(&binary).is_err());
+    }
+}
+
+#[cfg(test)]
+mod access_mask_tests {
+    use super::windows_writable_access;
+
+    #[test]
+    fn windows_read_execute_is_not_writable() {
+        for mask in [0, 0x120089, 0x1200a9, 0x80000000, 0xa0000000] {
+            assert!(!windows_writable_access(mask), "read-only mask {mask:#x}");
+        }
+    }
+
+    #[test]
+    fn windows_mutating_permissions_remain_writable() {
+        for mask in [
+            0x2, 0x4, 0x10, 0x40, 0x100, 0x10000, 0x40000, 0x80000, 0x40000000, 0x10000000,
+        ] {
+            assert!(windows_writable_access(mask), "write mask {mask:#x}");
+            assert!(windows_writable_access(mask | 0x1200a9));
+        }
     }
 }
