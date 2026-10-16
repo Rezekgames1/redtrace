@@ -3,6 +3,7 @@ use crate::{
     index::{ExecutionLimits, QueryBudget, QueryMatches, QueryPage, SearchResult},
     model::Event,
     query::Expr,
+    time_range::TimeRange,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -33,6 +34,32 @@ pub struct SegmentMeta {
     pub created_unix: u64,
     pub min_timestamp: String,
     pub max_timestamp: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time_bounds: Option<SegmentTimeBounds>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct SegmentTimeBounds {
+    pub minimum: Option<String>,
+    pub maximum: Option<String>,
+}
+
+fn timestamp_bounds<'a>(timestamps: impl IntoIterator<Item = &'a str>) -> SegmentTimeBounds {
+    let mut minimum = None;
+    let mut maximum = None;
+    for timestamp in timestamps {
+        let Ok(timestamp) = chrono::DateTime::parse_from_rfc3339(timestamp) else {
+            // Unknown timestamps must never allow a segment to be excluded.
+            return SegmentTimeBounds::default();
+        };
+        let timestamp = timestamp.with_timezone(&chrono::Utc);
+        minimum = Some(minimum.map_or(timestamp, |previous| std::cmp::min(previous, timestamp)));
+        maximum = Some(maximum.map_or(timestamp, |previous| std::cmp::max(previous, timestamp)));
+    }
+    SegmentTimeBounds {
+        minimum: minimum.map(|at| at.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true)),
+        maximum: maximum.map(|at| at.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true)),
+    }
 }
 
 impl SegmentMeta {
@@ -274,15 +301,42 @@ impl SegmentStore {
     pub fn ensure_indexes(&self) -> io::Result<bool> {
         let _guard = self.lock_writer()?;
         let manifest = self.read_manifest()?;
-        if manifest.segments.iter().all(|segment| {
+        let indexes_current = manifest.segments.iter().all(|segment| {
             segment
                 .index
                 .as_ref()
                 .is_some_and(segment_index::is_current)
-        }) {
+        });
+        if !indexes_current {
+            return self.rewrite_all(&manifest, true);
+        }
+        if manifest
+            .segments
+            .iter()
+            .all(|segment| segment.time_bounds.is_some())
+        {
             return Ok(false);
         }
-        self.rewrite_all(&manifest, true)
+        self.validate_segments(&manifest)?;
+        let mut updated = manifest.clone();
+        for segment in &mut updated.segments {
+            if segment.time_bounds.is_some() {
+                continue;
+            }
+            let path = self.root.join("segments").join(&segment.file);
+            let timestamps = BufReader::new(File::open(path)?)
+                .lines()
+                .map(|line| {
+                    serde_json::from_str::<Event>(&line?)
+                        .map(|event| event.timestamp)
+                        .map_err(io::Error::other)
+                })
+                .collect::<io::Result<Vec<_>>>()?;
+            segment.time_bounds = Some(timestamp_bounds(timestamps.iter().map(String::as_str)));
+        }
+        let mut transaction = self.transaction()?;
+        self.write_manifest(&updated, &mut transaction)?;
+        Ok(true)
     }
 
     pub fn compact_all(&self) -> io::Result<bool> {
@@ -367,6 +421,16 @@ impl SegmentStore {
         &self,
         expression: &Expr,
         budget: &mut QueryBudget,
+        visitor: impl FnMut(&Event, &mut QueryBudget) -> io::Result<()>,
+    ) -> io::Result<()> {
+        self.search_into_time_range(expression, budget, &TimeRange::default(), visitor)
+    }
+
+    pub fn search_into_time_range(
+        &self,
+        expression: &Expr,
+        budget: &mut QueryBudget,
+        range: &TimeRange,
         mut visitor: impl FnMut(&Event, &mut QueryBudget) -> io::Result<()>,
     ) -> io::Result<()> {
         let _guard = loop {
@@ -393,7 +457,18 @@ impl SegmentStore {
             ));
         }
         let directory = self.root.join("segments");
+        let mut visitor = |event: &Event, budget: &mut QueryBudget| {
+            if range.contains(&event.timestamp) {
+                visitor(event, budget)?;
+            }
+            Ok(())
+        };
         for segment in &manifest.segments {
+            if let Some(bounds) = &segment.time_bounds
+                && !range.overlaps(bounds.minimum.as_deref(), bounds.maximum.as_deref())
+            {
+                continue;
+            }
             budget.segment()?;
             let path = directory.join(&segment.file);
             if let Some(meta) = &segment.index {
@@ -610,6 +685,9 @@ impl SegmentStore {
                 .max()
                 .unwrap_or_default()
                 .to_owned(),
+            time_bounds: Some(timestamp_bounds(
+                events.iter().map(|event| event.timestamp.as_str()),
+            )),
         };
         if segment.storage_bytes() > estimate {
             return Err(io::Error::other("segment output exceeded reserved space"));
@@ -1362,6 +1440,150 @@ mod tests {
         let found = store.search(&query, 10).unwrap();
         assert_eq!(found.total, 1);
         assert_eq!(found.events, vec![expected[2].clone()]);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn recent_queries_skip_historical_sidecars_before_scan_and_segment_budgets() {
+        let root = directory("time-pruning-budget");
+        let store = SegmentStore::open(root.clone()).unwrap();
+        let mut old = event(1, &"historical payload ".repeat(12000));
+        old.timestamp = "2020-01-01T00:00:00Z".into();
+        let mut recent = event(2, "recent marker");
+        recent.timestamp = "2026-10-16T10:00:00Z".into();
+        store.commit(&[old]).unwrap();
+        store.commit(std::slice::from_ref(&recent)).unwrap();
+        let range = TimeRange::parse(&crate::time_range::TimeRangeParams {
+            from: Some("2026-10-16T09:00:00Z".into()),
+            to: None,
+        })
+        .unwrap();
+        let limits = ExecutionLimits {
+            max_scan_bytes: 32 * 1024,
+            max_segments: 1,
+            ..ExecutionLimits::default()
+        };
+        let mut budget = QueryBudget::new(limits);
+        let mut found = Vec::new();
+        store
+            .search_into_time_range(&Expr::MatchAll, &mut budget, &range, |event, _| {
+                found.push(event.clone());
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(found, vec![recent]);
+        assert_eq!(budget.usage.segments, 1);
+        assert!(
+            store
+                .search_into(
+                    &Expr::MatchAll,
+                    &mut QueryBudget::new(limits),
+                    |_, _| Ok(())
+                )
+                .is_err()
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn legacy_time_bounds_upgrade_is_chronological_metadata_only_and_idempotent() {
+        let root = directory("legacy-time-bounds");
+        let store = SegmentStore::open(root.clone()).unwrap();
+        let mut first = event(1, "offset event");
+        first.timestamp = "2026-10-12T10:30:00+02:00".into();
+        let mut second = event(2, "UTC event");
+        second.timestamp = "2026-10-12T09:00:00Z".into();
+        store.commit(&[first, second.clone()]).unwrap();
+        let mut manifest = store.read_manifest().unwrap();
+        let original = manifest.segments[0].clone();
+        let event_path = root.join("segments").join(&original.file);
+        let bytes = fs::read(&event_path).unwrap();
+        manifest.segments[0].time_bounds = None;
+        fs::write(&store.manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        assert!(store.ensure_indexes().unwrap());
+        assert!(!store.ensure_indexes().unwrap());
+        let current = store.read_manifest().unwrap();
+        assert_eq!(current.segments[0].file, original.file);
+        assert_eq!(fs::read(&event_path).unwrap(), bytes);
+        let bounds = current.segments[0].time_bounds.as_ref().unwrap();
+        assert_eq!(
+            bounds.minimum.as_deref(),
+            Some("2026-10-12T08:30:00.000000000Z")
+        );
+        assert_eq!(
+            bounds.maximum.as_deref(),
+            Some("2026-10-12T09:00:00.000000000Z")
+        );
+        let range = TimeRange::parse(&crate::time_range::TimeRangeParams {
+            from: Some("2026-10-12T09:00:00Z".into()),
+            to: Some("2026-10-12T09:00:01Z".into()),
+        })
+        .unwrap();
+        let mut found = Vec::new();
+        store
+            .search_into_time_range(
+                &Expr::MatchAll,
+                &mut QueryBudget::new(ExecutionLimits::default()),
+                &range,
+                |event, _| {
+                    found.push(event.clone());
+                    Ok(())
+                },
+            )
+            .unwrap();
+        assert_eq!(found, vec![second]);
+        let before = TimeRange::parse(&crate::time_range::TimeRangeParams {
+            from: None,
+            to: Some("2026-10-12T08:30:00Z".into()),
+        })
+        .unwrap();
+        let mut budget = QueryBudget::new(ExecutionLimits::default());
+        store
+            .search_into_time_range(&Expr::MatchAll, &mut budget, &before, |_, _| {
+                panic!("exclusive end must exclude the segment")
+            })
+            .unwrap();
+        assert_eq!(budget.usage.segments, 0);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn invalid_event_time_disables_segment_pruning_without_hiding_valid_records() {
+        let root = directory("invalid-time-bounds");
+        let store = SegmentStore::open(root.clone()).unwrap();
+        let mut invalid = event(1, "unknown time");
+        invalid.timestamp = "invalid".into();
+        let mut valid = event(2, "valid time");
+        valid.timestamp = "2026-10-16T10:00:00Z".into();
+        store.commit(&[invalid, valid.clone()]).unwrap();
+        assert!(
+            store.read_manifest().unwrap().segments[0]
+                .time_bounds
+                .as_ref()
+                .unwrap()
+                .minimum
+                .is_none()
+        );
+        assert!(!store.ensure_indexes().unwrap());
+        let range = TimeRange::parse(&crate::time_range::TimeRangeParams {
+            from: Some("2026-10-16T00:00:00Z".into()),
+            to: None,
+        })
+        .unwrap();
+        let mut found = Vec::new();
+        store
+            .search_into_time_range(
+                &Expr::MatchAll,
+                &mut QueryBudget::new(ExecutionLimits::default()),
+                &range,
+                |event, _| {
+                    found.push(event.clone());
+                    Ok(())
+                },
+            )
+            .unwrap();
+        assert_eq!(found, vec![valid]);
+        assert_eq!(store.recover().unwrap().events.len(), 2);
         let _ = fs::remove_dir_all(root);
     }
 

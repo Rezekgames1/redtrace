@@ -15,10 +15,10 @@ import type { SearchMode, SavedView } from "./events/preferences";
 import { PreferencesPanel } from "./events/preferences-panel";
 import { AutocompleteInput } from "./events/autocomplete-input";
 import { buildSuggestionCatalog, containsSuggestions, fieldSuggestions, querySuggestions, valueSuggestions } from "./events/suggestions";
-import { ALL_TIME } from "./events/time";
 import type { TimeFilter } from "./events/time";
 
 const selectedFields = ["@timestamp", "event.id", "event.description", "source", "process.command_line", "process.pid", "process.parent.pid"];
+const initialTimeFilter: TimeFilter = { preset: "15m", from: "", to: "" };
 type Workspace = "events" | "alerts" | "sources" | "audit" | "diagnostics" | "settings" | "rules" | "cases";
 
 function workspaceTitle(workspace: Workspace): string {
@@ -45,8 +45,8 @@ function lookbackLabel(value?: string): string {
 
 export default function Home() {
   const [query, setQuery] = useState("");
-  const [timeFilter, setTimeFilter] = useState<TimeFilter>(ALL_TIME);
-  const timeRef = useRef<TimeFilter>(ALL_TIME);
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>(initialTimeFilter);
+  const timeRef = useRef<TimeFilter>(initialTimeFilter);
   const [queryCaret, setQueryCaret] = useState(0);
   const [appliedQuery, setAppliedQuery] = useState("*");
   const [searchMode, setSearchMode] = useState<"contains" | "dsl">("contains");

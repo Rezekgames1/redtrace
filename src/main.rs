@@ -356,6 +356,7 @@ fn query_json(value: &impl Serialize, budget: &mut QueryBudget) -> io::Result<Re
     Ok(([(header::CONTENT_TYPE, "application/json")], output.bytes).into_response())
 }
 
+#[cfg(test)]
 fn visit_query(
     snapshot: &EventSnapshot,
     segments: &SegmentStore,
@@ -383,15 +384,21 @@ fn visit_time_query(
     range: &TimeRange,
     mut visitor: impl FnMut(&Event, &mut QueryBudget) -> io::Result<()>,
 ) -> io::Result<usize> {
+    let mut matches = QueryMatches::new();
     let mut total = 0;
-    visit_query(snapshot, segments, expression, budget, |event, budget| {
+    let mut unique = |event: &Event, budget: &mut QueryBudget| {
         budget.work(1)?;
-        if !event.fields.contains_key("event.filtered") && range.contains(&event.timestamp) {
+        if matches.accept(event, budget)?
+            && !event.fields.contains_key("event.filtered")
+            && range.contains(&event.timestamp)
+        {
             total += 1;
             visitor(event, budget)?;
         }
         Ok(())
-    })?;
+    };
+    segments.search_into_time_range(expression, budget, range, &mut unique)?;
+    snapshot.visit(expression, budget, &mut unique)?;
     Ok(total)
 }
 
@@ -2832,6 +2839,30 @@ mod tests {
             search(State(state.clone()), Query(params)).await.status(),
             StatusCode::BAD_REQUEST
         );
+        drop(state);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn recent_search_prunes_history_before_the_scan_budget() {
+        let (state, root) = query_state(ExecutionLimits {
+            max_scan_bytes: 64 * 1024,
+            ..ExecutionLimits::default()
+        });
+        let historical = Event::normalized(
+            99,
+            "2020-01-01T00:00:00Z".into(),
+            "old.fixture".into(),
+            "low".into(),
+            "historical payload ".repeat(12000),
+            BTreeMap::new(),
+        );
+        state.segments.commit(&[historical]).unwrap();
+        let mut params = search_params(None);
+        params.range.from = Some("2026-10-12T00:00:00Z".into());
+        let response = search(State(state.clone()), Query(params)).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response_json(response).await["total"], 4);
         drop(state);
         std::fs::remove_dir_all(root).unwrap();
     }

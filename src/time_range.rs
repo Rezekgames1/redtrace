@@ -14,6 +14,25 @@ pub struct TimeRange {
 }
 
 impl TimeRange {
+    pub fn overlaps(&self, minimum: Option<&str>, maximum: Option<&str>) -> bool {
+        if self.from.is_none() && self.to.is_none() {
+            return true;
+        }
+        let (Some(minimum), Some(maximum)) = (minimum, maximum) else {
+            return true;
+        };
+        let (Ok(minimum), Ok(maximum)) = (
+            DateTime::parse_from_rfc3339(minimum),
+            DateTime::parse_from_rfc3339(maximum),
+        ) else {
+            return true;
+        };
+        if minimum > maximum {
+            return true;
+        }
+        self.from.is_none_or(|from| maximum >= from) && self.to.is_none_or(|to| minimum < to)
+    }
+
     pub fn parse(params: &TimeRangeParams) -> Result<Self, &'static str> {
         let parse = |value: &Option<String>| -> Result<Option<DateTime<Utc>>, &'static str> {
             value

@@ -88,6 +88,7 @@ fn seed_legacy(store: &SegmentStore, events: &[Event], age: u64) -> SegmentMeta 
     drop(output);
     let index = segment_index::write(&directory, &stem, events).unwrap();
     let meta = SegmentMeta {
+        time_bounds: None,
         id,
         file,
         events: events.len(),
