@@ -16,6 +16,11 @@ const catalog: Record<string, { label: string; width: number; className: string 
   "source.ip": { label: "IP источника", width: 140, className: "mono" },
   "host.name": { label: "Хост", width: 150, className: "customCell" },
   "event.outcome": { label: "Результат", width: 130, className: "customCell" },
+  "sudo.command": { label: "Запрошенная команда sudo", width: 300, className: "customCell" },
+  "user.target.name": { label: "Целевой пользователь", width: 150, className: "customCell" },
+  "authorization.right": { label: "Запрошенное право", width: 260, className: "customCell" },
+  "client.process.executable": { label: "Приложение-заявитель", width: 260, className: "customCell" },
+  "client.process.pid": { label: "PID заявителя", width: 110, className: "mono" },
 };
 
 export function validColumn(field: unknown): field is string {

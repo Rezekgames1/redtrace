@@ -130,7 +130,7 @@ export default function Home() {
     "process.parent.pid": selected.fields["process.parent.pid"] ?? "н/д",
     ...selected.fields,
   } : {}, [selected]);
-  const summaryFields = Object.entries(detailFields).filter(([name, value]) => ["@timestamp", "source", "event.id", "event.outcome", "user.name", "source.ip", "process.command_line", "process.executable"].includes(name) && value !== "н/д");
+  const summaryFields = Object.entries(detailFields).filter(([name, value]) => ["@timestamp", "source", "event.id", "event.outcome", "user.name", "user.target.name", "source.ip", "sudo.command", "authorization.right", "client.process.executable", "client.process.pid", "process.command_line", "process.executable"].includes(name) && value !== "н/д");
   const explorerStyle = {
     "--fields-width": `${fieldsWidth}px`,
     "--details-width": `${detailsWidth}px`,

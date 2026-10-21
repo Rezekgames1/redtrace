@@ -1,9 +1,10 @@
 import { memo } from "react";
 import type { UiEvent } from "./types";
 import { columnInfo, columnLayout } from "./columns";
+import { eventContext } from "./summary";
 
 export const EventRow = memo(function EventRow({ event, columns, active, onSelect }: { event: UiEvent; columns: string[]; active: boolean; onSelect: (event: UiEvent) => void }) {
-  const context = [event.fields["process.command_line"], event.fields["source.ip"], event.fields["file.path"]].find((value) => value && value !== "н/д" && !event.title.toLowerCase().includes(value.toLowerCase()));
+  const context = eventContext(event);
   return <button className={`eventRow ${active ? "active" : ""}`} data-uid={event.uid} style={columnLayout(columns)} onClick={() => onSelect(event)}>
     <span className="expand">›</span>
     {columns.map((field) => {

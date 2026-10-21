@@ -43,7 +43,10 @@ test("DSL field completion handles nested predicates and replaces the field at t
   const choice = querySuggestions(middle, 7, catalog).find(item => item.label === "agent.name");
   assert.equal(choice.value, "agent.name=old OR source=other");
   assert.equal(choice.caret, "agent.name=".length);
-  assert.ok(querySuggestions("NOT pro", 7, catalog).every(item => item.label.startsWith("process.")));
+  const negated = querySuggestions("NOT pro", 7, catalog);
+  assert.ok(negated[0].label.startsWith("process."));
+  assert.ok(negated.every(item => item.label.includes("pro") && item.value === `NOT ${item.label}=`));
+  assert.equal(querySuggestions("NOT client.process.p", 20, catalog)[0].value, "NOT client.process.pid=");
 });
 
 test("DSL value completion preserves escaping, operators and the remaining query", () => {

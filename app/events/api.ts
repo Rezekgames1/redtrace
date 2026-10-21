@@ -1,5 +1,6 @@
 import type { DetectionAlert, EventLevel, SearchResult, UiEvent } from "./types";
 import { RevisionDecoder } from "./stream";
+import { eventTitle } from "./summary";
 import { ALL_TIME, timeQuery } from "./time";
 import type { TimeFilter } from "./time";
 
@@ -330,7 +331,7 @@ export async function searchLocalEvents(query: string, cursor?: string | null, i
     time: item.timestamp.slice(11, 23),
     level: item.level,
     source: item.source,
-    title: item.message,
+    title: eventTitle(item.source, item.message, item.fields),
     fields: {
       "@timestamp": item.timestamp,
       "source": item.source,

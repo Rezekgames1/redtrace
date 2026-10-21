@@ -15,7 +15,7 @@
     "desktop:prepare:debug": "node scripts/prepare-sidecar.mjs",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs tests/query-ui.test.mjs tests/live-ui.test.mjs tests/preferences-ui.test.mjs tests/suggestions-ui.test.mjs tests/time-ui.test.mjs",
+    "test": "npm run build && node --test tests/rendered-html.test.mjs tests/query-ui.test.mjs tests/live-ui.test.mjs tests/preferences-ui.test.mjs tests/suggestions-ui.test.mjs tests/time-ui.test.mjs tests/event-summary-ui.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern desktop-dist --ignore-pattern src-tauri/target --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },
