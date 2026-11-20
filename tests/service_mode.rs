@@ -32,6 +32,22 @@ impl Fixture {
         }
     }
 
+    fn executable(&self) -> PathBuf {
+        let built = PathBuf::from(env!("CARGO_BIN_EXE_redtrace"));
+        #[cfg(windows)]
+        {
+            // The CI checkout may grant write access to groups that a service
+            // executable must not trust. Stage it with a private Windows DACL.
+            let staged = self.root.join("redtrace.exe");
+            if !staged.exists() {
+                service::write_private(&staged, &std::fs::read(&built).unwrap()).unwrap();
+            }
+            staged
+        }
+        #[cfg(not(windows))]
+        built
+    }
+
     fn launch(
         &mut self,
         persistent: bool,
@@ -39,7 +55,7 @@ impl Fixture {
     ) -> (String, Option<LocalSession>) {
         let data = self.root.join("data");
         let config = self.root.join("collector.json");
-        let executable = PathBuf::from(env!("CARGO_BIN_EXE_redtrace"));
+        let executable = self.executable();
         service::write_private(&config, &serde_json::to_vec(&serde_json::json!({
             "data_dir": data, "api_bind": "127.0.0.1:0", "environment": {"REDTRACE_COLLECT_LOCAL": "0"}
         })).unwrap()).unwrap();
@@ -427,13 +443,13 @@ fn protected_templates_and_config_reject_secret_and_identity_shortcuts() {
     let config = fixture.root.join("service.json");
     let valid = serde_json::json!({"data_dir": fixture.root.join("state")});
     service::write_private(&config, &serde_json::to_vec(&valid).unwrap()).unwrap();
-    let binary = std::path::Path::new(env!("CARGO_BIN_EXE_redtrace"));
-    let template = service::systemd_template(binary, &config, "fixture-user", false).unwrap();
+    let binary = fixture.executable();
+    let template = service::systemd_template(&binary, &config, "fixture-user", false).unwrap();
     assert!(template.contains("User=fixture-user\n"));
     assert!(template.contains("Restart=on-failure\n"));
     assert!(template.contains("TimeoutStopSec=45\n"));
     for identity in ["", "root", "0", "user\nExecStart=bad"] {
-        assert!(service::systemd_template(binary, &config, identity, false).is_err());
+        assert!(service::systemd_template(&binary, &config, identity, false).is_err());
     }
     for variable in [
         "REDTRACE_API_TOKEN",
