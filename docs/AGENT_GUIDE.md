@@ -29,7 +29,7 @@ RED//TRACE — локальный SIEM: Rust core, Tauri desktop/WebView UI, seg
 
 ## Обязательное поведение агента
 
-1. Сначала прочитай `AGENT_HANDOFF_WINDOWS.md`, этот файл и `docs/WINDOWS_VALIDATION.md`, затем проверь `git status`. Репозиторий может содержать крупные uncommitted/user changes: не очищай, не reset/rebase и не перезаписывай их.
+1. Сначала прочитай этот файл и `docs/WINDOWS_VALIDATION.md`, затем проверь `git status`. Репозиторий может содержать крупные uncommitted/user changes: не очищай, не reset/rebase и не перезаписывай их.
 2. Работай узкими итерациями. Перед изменением проверь конкретный маршрут/компонент и сформулируй проверяемый результат. Не запускай несколько конкурирующих Cargo/Tauri builds: они блокируют общий artifact lock.
 3. Не запускай release/package rebuild после каждой CSS/TS правки. Сначала `npm run lint` и `npm exec -- tsc --noEmit`; release desktop/NSIS — один раз для итоговой проверки или когда действительно менялись Rust/Tauri/package resources.
 4. Любое действие с UAC, auditpol, HKLM, Windows Event Log channel ACL, службами/драйверами требует явного подтверждения владельца в текущей задаче. Не считай прежнее разрешение бессрочным.

@@ -20,7 +20,7 @@ Final package checks: Linux/Kali 131 library, 11 main и 6 hardening tests PASS.
 
 Mac `192.168.31.216` → Windows `192.168.31.96:19711`, прямой HTTPS без SSH tunnel. Отдельные test CA, agents и базы; API на ephemeral loopback port. Initial 66 records; fresh SSH activity видна через 7.377 s; перед restart наблюдались 103 UID. После остановки collector 35 events durable spooled; agent force-kill; collector и agent restarted: 144 records, все 103 прежних UID сохранены, spool pending=0. Bad token→401, absent CA→certificate rejection. Storage/error counters 0. Это короткий end-to-end case, не long-soak/SLA.
 
-Полный локальный report: protected `%LOCALAPPDATA%/Temp/opencode/redtrace-network-31a10db344c3e73c/report.json`. Первый basic pass: `redtrace-network-67eedeaee3fc249b/report.json`. Fixture core/agent завершены. Temporary Windows rule `REDTRACE-MacBook-Isolated-Test-19711` удалено и отсутствие проверено. Working 9710/9711 SIEM не перезапускался. Тестовый SSH public key помечен `redtrace-macbook-temporary`; cleanup command находится в `scripts/macbook-ssh.py`.
+Тестовые процессы завершены. Временное правило Windows Firewall удалено. Рабочий SIEM не перезапускался.
 
 ## Ресурсы
 

@@ -2,13 +2,66 @@
 
 Легковесный локальный SIEM и обозреватель событий для Windows, Linux и macOS. Проект хранит и ищет события на самом хосте, не требует Elasticsearch, JVM или отдельного сервера.
 
-> Название `RED//TRACE` рабочее и может быть заменено без изменения архитектуры.
+## Установка на Windows, macOS и Linux
 
-## Ранняя beta — 2026-10-13
+Подберите пакет под свою систему и архитектуру. Desktop-пакет включает интерфейс и ядро. Node.js и Rust нужны для сборки из исходников.
 
-Установка Windows SIEM, подключение Windows/Linux/macOS агентов, TLS, дата/время фильтры и сетевые результаты: **[Инструкция beta](docs/BETA_INSTALL.md)**. Актуальные пакеты: `outputs/beta-20261013/`. Это ранняя beta; старые release/load оценки ниже — исторические срезы.
+| Система | Пакет | Установка |
+| --- | --- | --- |
+| Windows x64 | NSIS `.exe` | Запустите установщик и откройте REDTRACE из меню «Пуск». Для интерфейса требуется Microsoft Edge WebView2 Runtime. |
+| macOS | `.dmg` или `.app` | Для DMG откройте образ и перенесите REDTRACE в «Программы». Выберите сборку для Apple Silicon или Intel по архитектуре Mac. |
+| Debian, Ubuntu, Kali | `.deb` | Из каталога загрузки выполните `sudo apt install ./имя-пакета.deb` с фактическим именем файла. Запустите REDTRACE из меню приложений. |
+| Fedora | `.rpm`, собранный для вашей системы | Выполните `sudo dnf install ./имя-пакета.rpm` с фактическим именем файла. |
 
-GUI installers теперь есть для всех трёх проверенных платформ: Windows `.exe`, Linux x64 `.deb`, macOS Apple Silicon `.dmg` с `.app`. Каждый содержит встроенный frontend и core, отдельно ставить Node.js/Rust не требуется.
+Готовый пакет можно взять из [артефактов desktop CI](https://github.com/Rezekgames1/redtrace/actions/workflows/desktop.yml), если доступен успешный запуск для нужной версии и платформы. CI собирает неподписанные NSIS, Debian и macOS App Bundle. Для получения другого формата или при отсутствии артефакта соберите пакет по шагам ниже.
+
+### Сборка из исходников
+
+Установите [Git](https://git-scm.com/downloads), [Node.js 24 LTS](https://nodejs.org/en/download) и [Rust stable через rustup](https://rustup.rs/). Затем подготовьте систему:
+
+- **Windows.** В Visual Studio Build Tools выберите «Разработка классических приложений на C++» с MSVC и Windows SDK. Установите WebView2 Runtime, если он отсутствует. Откройте новый PowerShell и убедитесь, что `rustc -vV` показывает хост с суффиксом `-pc-windows-msvc`.
+- **macOS.** Выполните `xcode-select --install`. На Apple Silicon используйте нативный терминал и инструменты arm64, чтобы получить пакет для этой архитектуры.
+- **Debian, Ubuntu, Kali.** Установите зависимости сборки на системе с WebKitGTK 4.1:
+
+  ```bash
+  sudo apt update
+  sudo apt install build-essential pkg-config curl wget file libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+  ```
+
+- **Fedora.** Установите C toolchain и библиотеки:
+
+  ```bash
+  sudo dnf group install c-development
+  sudo dnf install pkgconf-pkg-config curl wget file webkit2gtk4.1-devel libxdo-devel openssl-devel libappindicator-gtk3-devel librsvg2-devel
+  ```
+
+Для других дистрибутивов используйте [список зависимостей Tauri](https://v2.tauri.app/start/prerequisites/#linux). Собирайте пакет на целевой ОС.
+
+```sh
+git clone https://github.com/Rezekgames1/redtrace.git
+cd redtrace
+node --version
+rustc --version
+npm ci
+```
+
+Затем выберите команду для своей платформы:
+
+| Система | Команда |
+| --- | --- |
+| Windows | `npm run desktop:build -- --bundles nsis` |
+| macOS | `npm run desktop:build -- --bundles dmg` |
+| Debian, Ubuntu, Kali | `npm run desktop:build -- --bundles deb` |
+| Fedora | `npm run desktop:build -- --bundles rpm` |
+
+Пакет появится в одном из подкаталогов `src-tauri/target/release/bundle/`. Для запуска прямо из рабочего дерева используйте `npm run desktop:dev`.
+
+### Первый запуск
+
+1. Запустите REDTRACE обычным пользователем и откройте «Источники». Desktop сам запускает ядро и авторизует подключение к локальному API.
+2. Проверьте статус нативного источника и ленту событий без активных фильтров. На Windows используются Event Log, на macOS — Unified Log, на Linux — journald.
+3. Если источник недоступен, проверьте системные разрешения. На Windows доступ к Security зависит от политики чтения журнала, а Sysmon должен быть установлен отдельно. На Linux выполните `journalctl -n 10` от имени пользователя приложения. Если требуется членство в `systemd-journal`, после изменения групп заново войдите в сеанс.
+4. Для эксплуатации ядра как службы и подключения удалённых хостов используйте [режим службы](docs/SERVICE_MODE.md) и [руководство по агентам](docs/WINDOWS_AGENTS.md).
 
 ## Что уже работает
 
@@ -41,7 +94,7 @@ GUI installers теперь есть для всех трёх проверенн
 - базовый профиль Sysmon с контролируемым объёмом событий;
 - предварительный просмотр и модель отката до любых системных изменений.
 
-## Локальный запуск
+## Локальный запуск для разработки
 
 Терминал 1:
 
@@ -52,11 +105,11 @@ REDTRACE_ALLOW_UNAUTHENTICATED=1 cargo run
 Терминал 2:
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
-Откройте `http://localhost:3000`. Интерфейс показывает только события, полученные локальным нативным сборщиком. При недоступном API или пустом системном журнале отображается пустое состояние — тестовые события не подставляются.
+В Windows PowerShell в первом терминале задайте `$env:REDTRACE_ALLOW_UNAUTHENTICATED = "1"` и отдельно выполните `cargo run`. Откройте `http://localhost:3000`. Интерфейс показывает только события, полученные локальным нативным сборщиком. При недоступном API или пустом системном журнале отображается пустое состояние — тестовые события не подставляются.
 
 Desktop-режим (Tauri/Wry, Node.js пользователю не нужен):
 

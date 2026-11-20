@@ -44,3 +44,13 @@ yarn-error.log*
 /outputs/
 /work/
 /tsconfig.tsbuildinfo
+
+# Local test and archive files
+/AGENT_HANDOFF_WINDOWS.md
+/ARCHIVE_INFO.json
+/scripts/macbook-network-test.py
+/scripts/macbook-probe.sh
+/scripts/macbook-ssh.py
+/scripts/macbook-test-firewall.ps1
+__pycache__/
+*.py[cod]
